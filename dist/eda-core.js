@@ -9,6 +9,8 @@ var LineSightEDA = (function () {
     total: ["總數", "投入數", "檢驗數", "產量", "totalqty", "quantity", "qty"],
     defect: ["不良原因", "缺陷類型", "異常類型", "defect", "defecttype", "ngreason"],
     timestamp: ["時間", "日期", "datetime", "timestamp", "date", "time"],
+    parameter: ["參數", "設定值", "實際值", "溫度", "壓力", "電流", "電壓", "速度", "米速", "張力", "厚度", "parameter", "setpoint", "temperature", "pressure", "current", "voltage", "speed"],
+    abnormal: ["異常", "不良", "缺陷", "原因", "處置", "改善", "責任", "defect", "abnormal", "failure", "cause", "disposition"],
   };
 
   function normalizeName(value) {
@@ -43,6 +45,28 @@ var LineSightEDA = (function () {
       if (partial) return partial.name;
     }
     return null;
+  }
+
+  function detectDataType(fileName, columns, requestedType) {
+    if (["production_parameters", "abnormal_records"].includes(requestedType)) {
+      return { value: requestedType, source: "manual", confidence: 1, reasons: ["使用者手動指定"] };
+    }
+    const normalizedFile = normalizeName(fileName);
+    let productionScore = /(生產參數|製程參數|productionparameter|processparameter)/.test(normalizedFile) ? 4 : 0;
+    let abnormalScore = /(異常紀錄|品質異常|不良紀錄|缺陷紀錄|abnormal|defect)/.test(normalizedFile) ? 4 : 0;
+    const normalizedColumns = columns.map(normalizeName);
+    productionScore += normalizedColumns.filter((column) => FIELD_HINTS.parameter.some((hint) => column.includes(hint))).length;
+    abnormalScore += normalizedColumns.filter((column) => FIELD_HINTS.abnormal.some((hint) => column.includes(hint))).length;
+    const topScore = Math.max(productionScore, abnormalScore);
+    const value = topScore === 0 || productionScore === abnormalScore
+      ? "unknown"
+      : productionScore > abnormalScore ? "production_parameters" : "abnormal_records";
+    return {
+      value,
+      source: "automatic",
+      confidence: topScore ? Math.min(0.95, 0.55 + Math.abs(productionScore - abnormalScore) * 0.1) : 0,
+      reasons: [`生產參數特徵 ${productionScore}`, `異常紀錄特徵 ${abnormalScore}`],
+    };
   }
 
   function percentile(sorted, p) {
@@ -233,10 +257,15 @@ var LineSightEDA = (function () {
     });
 
     const combinedColumns = summarizeColumns(allRows, allColumns);
+    const classification = detectDataType(workbook.fileName, allColumns, options?.dataType);
     const yieldMetric = calculateYield(allRows, allColumns);
     const lines = lineBreakdown(allRows, allColumns);
     return {
-      template_id: "fuye-production-quality-v1",
+      template_id: classification.value === "production_parameters"
+        ? "fuye-production-parameters-v1"
+        : classification.value === "abnormal_records" ? "fuye-abnormal-records-v1" : "fuye-production-quality-v1",
+      data_type: classification.value,
+      classification,
       generated_at: new Date().toISOString(),
       input_summary: {
         file_name: workbook.fileName || null,
@@ -269,7 +298,7 @@ var LineSightEDA = (function () {
     };
   }
 
-  return { analyzeWorkbook, asNumber, normalizeName };
+  return { analyzeWorkbook, asNumber, normalizeName, detectDataType };
 })();
 
 if (typeof module === "object" && module.exports) module.exports = LineSightEDA;

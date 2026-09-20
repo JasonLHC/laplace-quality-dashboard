@@ -37,6 +37,8 @@ var LineSightEDA = (function () {
     total: ["總數", "投入數", "檢驗數", "產量", "totalqty", "quantity", "qty"],
     defect: ["不良原因", "缺陷類型", "異常類型", "defect", "defecttype", "ngreason"],
     timestamp: ["時間", "日期", "datetime", "timestamp", "date", "time"],
+    parameter: ["參數", "設定值", "實際值", "溫度", "壓力", "電流", "電壓", "速度", "米速", "張力", "厚度", "parameter", "setpoint", "temperature", "pressure", "current", "voltage", "speed"],
+    abnormal: ["異常", "不良", "缺陷", "原因", "處置", "改善", "責任", "defect", "abnormal", "failure", "cause", "disposition"],
   };
 
   function normalizeName(value) {
@@ -71,6 +73,28 @@ var LineSightEDA = (function () {
       if (partial) return partial.name;
     }
     return null;
+  }
+
+  function detectDataType(fileName, columns, requestedType) {
+    if (["production_parameters", "abnormal_records"].includes(requestedType)) {
+      return { value: requestedType, source: "manual", confidence: 1, reasons: ["使用者手動指定"] };
+    }
+    const normalizedFile = normalizeName(fileName);
+    let productionScore = /(生產參數|製程參數|productionparameter|processparameter)/.test(normalizedFile) ? 4 : 0;
+    let abnormalScore = /(異常紀錄|品質異常|不良紀錄|缺陷紀錄|abnormal|defect)/.test(normalizedFile) ? 4 : 0;
+    const normalizedColumns = columns.map(normalizeName);
+    productionScore += normalizedColumns.filter((column) => FIELD_HINTS.parameter.some((hint) => column.includes(hint))).length;
+    abnormalScore += normalizedColumns.filter((column) => FIELD_HINTS.abnormal.some((hint) => column.includes(hint))).length;
+    const topScore = Math.max(productionScore, abnormalScore);
+    const value = topScore === 0 || productionScore === abnormalScore
+      ? "unknown"
+      : productionScore > abnormalScore ? "production_parameters" : "abnormal_records";
+    return {
+      value,
+      source: "automatic",
+      confidence: topScore ? Math.min(0.95, 0.55 + Math.abs(productionScore - abnormalScore) * 0.1) : 0,
+      reasons: [`生產參數特徵 ${productionScore}`, `異常紀錄特徵 ${abnormalScore}`],
+    };
   }
 
   function percentile(sorted, p) {
@@ -261,10 +285,15 @@ var LineSightEDA = (function () {
     });
 
     const combinedColumns = summarizeColumns(allRows, allColumns);
+    const classification = detectDataType(workbook.fileName, allColumns, options?.dataType);
     const yieldMetric = calculateYield(allRows, allColumns);
     const lines = lineBreakdown(allRows, allColumns);
     return {
-      template_id: "fuye-production-quality-v1",
+      template_id: classification.value === "production_parameters"
+        ? "fuye-production-parameters-v1"
+        : classification.value === "abnormal_records" ? "fuye-abnormal-records-v1" : "fuye-production-quality-v1",
+      data_type: classification.value,
+      classification,
       generated_at: new Date().toISOString(),
       input_summary: {
         file_name: workbook.fileName || null,
@@ -297,7 +326,7 @@ var LineSightEDA = (function () {
     };
   }
 
-  return { analyzeWorkbook, asNumber, normalizeName };
+  return { analyzeWorkbook, asNumber, normalizeName, detectDataType };
 })();
 
 if (typeof module === "object" && module.exports) module.exports = LineSightEDA;
@@ -310,6 +339,7 @@ const MAX_FILE_BYTES = 50 * 1024 * 1024;
 
 const elements = {
   fileInput: document.querySelector("#fileInput"),
+  analysisType: document.querySelector("#analysisType"),
   dropZone: document.querySelector("#dropZone"),
   analyzeButton: document.querySelector("#analyzeButton"),
   fileTitle: document.querySelector("#fileTitle"),
@@ -426,10 +456,15 @@ async function readWorkbook(file) {
 
 function renderMetrics(report) {
   const yieldMetric = report.kpis.overall_yield;
-  document.querySelector("#overallYield").innerHTML = yieldMetric
+  const isAbnormal = report.data_type === "abnormal_records";
+  const countFallback = report.input_summary.row_count;
+  document.querySelector("#primaryMetricLabel").textContent = isAbnormal
+    ? "異常紀錄"
+    : yieldMetric ? "整體良率" : "製程紀錄";
+  document.querySelector("#overallYield").innerHTML = yieldMetric && !isAbnormal
     ? `${formatNumber(yieldMetric.value, 2)}<small>%</small>`
-    : "—";
-  document.querySelector(".metric-card.accent .delta").textContent = yieldMetric ? "已辨識" : "未辨識";
+    : formatNumber(countFallback, 0);
+  document.querySelector("#primaryMetricStatus").textContent = report.classification.source === "manual" ? "手動指定" : "自動判別";
 
   const lineCount = report.kpis.detected_line_count;
   document.querySelector("#lineCount").textContent = String(lineCount).padStart(2, "0");
@@ -449,7 +484,10 @@ function renderMetrics(report) {
 }
 
 function renderAudit(report) {
-  document.querySelector("#edaMode").textContent = "瀏覽器本機完成";
+  const typeLabel = report.data_type === "production_parameters"
+    ? "生產參數"
+    : report.data_type === "abnormal_records" ? "異常紀錄" : "待確認類型";
+  document.querySelector("#edaMode").textContent = `${typeLabel} · 本機完成`;
   document.querySelector("#auditSummary").innerHTML = `
     <div class="audit-facts">
       <div><b>${formatNumber(report.input_summary.sheet_count, 0)}</b><span>工作表</span></div>
@@ -549,7 +587,7 @@ async function runLocalEda(file) {
   await new Promise((resolve) => window.setTimeout(resolve, 30));
   const edaModule = typeof LineSightEDA !== "undefined" ? LineSightEDA : window.LineSightEDA;
   if (!edaModule) throw new Error("EDA 分析模組載入失敗，請重新整理頁面。");
-  const report = edaModule.analyzeWorkbook(workbook);
+  const report = edaModule.analyzeWorkbook(workbook, { dataType: elements.analysisType.value });
   renderReport(report);
   latestEda = report;
   return report;
@@ -559,7 +597,7 @@ async function submitToApi(file, report) {
   updateProgress(62, "正在安全上傳", "Cloudflare 將檔案轉送至 Laplace，不會公開 API key");
   const body = new FormData();
   body.append("file", file);
-  body.append("analysis_type", "production_quality");
+  body.append("analysis_type", report.data_type);
   body.append("template_id", report.template_id);
   body.append("eda_summary", JSON.stringify(report));
   const response = await fetch(`${API_BASE}/api/analysis-jobs`, { method: "POST", body });

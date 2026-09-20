@@ -5,6 +5,7 @@ const MAX_FILE_BYTES = 50 * 1024 * 1024;
 
 const elements = {
   fileInput: document.querySelector("#fileInput"),
+  analysisType: document.querySelector("#analysisType"),
   dropZone: document.querySelector("#dropZone"),
   analyzeButton: document.querySelector("#analyzeButton"),
   fileTitle: document.querySelector("#fileTitle"),
@@ -121,10 +122,15 @@ async function readWorkbook(file) {
 
 function renderMetrics(report) {
   const yieldMetric = report.kpis.overall_yield;
-  document.querySelector("#overallYield").innerHTML = yieldMetric
+  const isAbnormal = report.data_type === "abnormal_records";
+  const countFallback = report.input_summary.row_count;
+  document.querySelector("#primaryMetricLabel").textContent = isAbnormal
+    ? "異常紀錄"
+    : yieldMetric ? "整體良率" : "製程紀錄";
+  document.querySelector("#overallYield").innerHTML = yieldMetric && !isAbnormal
     ? `${formatNumber(yieldMetric.value, 2)}<small>%</small>`
-    : "—";
-  document.querySelector(".metric-card.accent .delta").textContent = yieldMetric ? "已辨識" : "未辨識";
+    : formatNumber(countFallback, 0);
+  document.querySelector("#primaryMetricStatus").textContent = report.classification.source === "manual" ? "手動指定" : "自動判別";
 
   const lineCount = report.kpis.detected_line_count;
   document.querySelector("#lineCount").textContent = String(lineCount).padStart(2, "0");
@@ -144,7 +150,10 @@ function renderMetrics(report) {
 }
 
 function renderAudit(report) {
-  document.querySelector("#edaMode").textContent = "瀏覽器本機完成";
+  const typeLabel = report.data_type === "production_parameters"
+    ? "生產參數"
+    : report.data_type === "abnormal_records" ? "異常紀錄" : "待確認類型";
+  document.querySelector("#edaMode").textContent = `${typeLabel} · 本機完成`;
   document.querySelector("#auditSummary").innerHTML = `
     <div class="audit-facts">
       <div><b>${formatNumber(report.input_summary.sheet_count, 0)}</b><span>工作表</span></div>
@@ -244,7 +253,7 @@ async function runLocalEda(file) {
   await new Promise((resolve) => window.setTimeout(resolve, 30));
   const edaModule = typeof LineSightEDA !== "undefined" ? LineSightEDA : window.LineSightEDA;
   if (!edaModule) throw new Error("EDA 分析模組載入失敗，請重新整理頁面。");
-  const report = edaModule.analyzeWorkbook(workbook);
+  const report = edaModule.analyzeWorkbook(workbook, { dataType: elements.analysisType.value });
   renderReport(report);
   latestEda = report;
   return report;
@@ -254,7 +263,7 @@ async function submitToApi(file, report) {
   updateProgress(62, "正在安全上傳", "Cloudflare 將檔案轉送至 Laplace，不會公開 API key");
   const body = new FormData();
   body.append("file", file);
-  body.append("analysis_type", "production_quality");
+  body.append("analysis_type", report.data_type);
   body.append("template_id", report.template_id);
   body.append("eda_summary", JSON.stringify(report));
   const response = await fetch(`${API_BASE}/api/analysis-jobs`, { method: "POST", body });

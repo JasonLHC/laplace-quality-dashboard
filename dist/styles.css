@@ -21,7 +21,7 @@
 * { box-sizing: border-box; }
 html { scroll-behavior: smooth; }
 body { margin: 0; min-width: 320px; background: var(--canvas); }
-button, input { font: inherit; }
+button, input, select { font: inherit; }
 button { cursor: pointer; }
 
 .app-shell { min-height: 100vh; display: grid; grid-template-columns: 240px minmax(0, 1fr); }
@@ -57,6 +57,9 @@ h1 { margin: 0; font-size: 1.55rem; letter-spacing: -.025em; }
 .upload-copy { padding: 6px 4px; }
 .upload-copy h2 { margin: 8px 0 9px; font-size: 1.35rem; }
 .upload-copy p { margin: 0; color: #b7c8d3; line-height: 1.65; font-size: .88rem; }
+.analysis-type-field { display: grid; gap: 6px; margin-top: 16px; color: #b7c8d3; font-size: .72rem; font-weight: 700; }
+.analysis-type-field select { width: 100%; padding: 9px 10px; border: 1px solid rgba(255,255,255,.22); border-radius: 8px; color: white; background: #173b50; outline: none; }
+.analysis-type-field select:focus { border-color: var(--teal-bright); }
 .drop-zone { min-height: 94px; display: flex; align-items: center; gap: 14px; padding: 15px 16px; border: 1px dashed rgba(255,255,255,.32); border-radius: 11px; background: rgba(255,255,255,.065); outline: none; transition: .2s ease; }
 .drop-zone:hover, .drop-zone:focus, .drop-zone.dragover { border-color: var(--teal-bright); background: rgba(56,213,198,.1); }
 .upload-icon { flex: 0 0 42px; width: 42px; height: 42px; display: grid; place-items: center; background: rgba(56,213,198,.14); border-radius: 10px; color: var(--teal-bright); }

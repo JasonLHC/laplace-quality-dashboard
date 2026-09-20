@@ -54,7 +54,15 @@
           <div class="upload-copy">
             <span class="section-index">NEW ANALYSIS</span>
             <h2 id="uploadTitle">匯入產線資料</h2>
-            <p>上傳 Excel 或 CSV，系統會自動辨識產線、批次與品質欄位。</p>
+            <p>支援生產參數與異常紀錄；系統會自動判別，也可手動指定。</p>
+            <label class="analysis-type-field" for="analysisType">
+              <span>資料類型</span>
+              <select id="analysisType">
+                <option value="auto">自動判別</option>
+                <option value="production_parameters">生產參數</option>
+                <option value="abnormal_records">異常紀錄</option>
+              </select>
+            </label>
           </div>
           <div class="drop-zone" id="dropZone" tabindex="0" role="button" aria-label="選擇或拖曳 Excel 檔案">
             <input id="fileInput" type="file" accept=".xlsx,.xls,.csv" hidden />
@@ -82,7 +90,7 @@
 
           <div class="metric-grid">
             <article class="metric-card accent">
-              <div class="metric-top"><span>整體良率</span><span class="delta positive">↑ 0.8%</span></div>
+              <div class="metric-top"><span id="primaryMetricLabel">整體良率</span><span class="delta positive" id="primaryMetricStatus">↑ 0.8%</span></div>
               <strong class="metric-value" id="overallYield">97.1<small>%</small></strong>
               <div class="mini-bars" aria-hidden="true"><i style="height:42%"></i><i style="height:55%"></i><i style="height:51%"></i><i style="height:68%"></i><i style="height:63%"></i><i style="height:78%"></i><i style="height:88%"></i></div>
             </article>

@@ -38,3 +38,27 @@ test("marks summaries as sampled when a sheet exceeds the configured limit", () 
   assert.equal(report.input_summary.sampled, true);
   assert.equal(report.input_summary.analyzed_row_count, 2);
 });
+
+test("classifies production parameter files", () => {
+  const report = analyzeWorkbook({
+    fileName: "A12_生產參數.xlsx",
+    sheets: [{ name: "參數", rows: [{ 產線: "A12", 電流: 10, 米速: 2.5 }] }],
+  });
+  assert.equal(report.data_type, "production_parameters");
+  assert.equal(report.template_id, "fuye-production-parameters-v1");
+});
+
+test("classifies abnormal record files and honors manual selection", () => {
+  const automatic = analyzeWorkbook({
+    fileName: "異常紀錄.xlsx",
+    sheets: [{ name: "異常", rows: [{ 產線: "A12", 不良原因: "厚度不足" }] }],
+  });
+  assert.equal(automatic.data_type, "abnormal_records");
+
+  const manual = analyzeWorkbook({
+    fileName: "unknown.xlsx",
+    sheets: [{ name: "Sheet1", rows: [{ 值: 1 }] }],
+  }, { dataType: "production_parameters" });
+  assert.equal(manual.data_type, "production_parameters");
+  assert.equal(manual.classification.source, "manual");
+});

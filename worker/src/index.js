@@ -74,6 +74,8 @@ function compactEda(formData) {
     const report = JSON.parse(raw);
     return {
       template_id: report.template_id,
+      data_type: report.data_type,
+      classification: report.classification,
       input_summary: report.input_summary,
       data_quality: {
         missing_rate: report.data_quality?.missing_rate,
@@ -87,9 +89,15 @@ function compactEda(formData) {
   }
 }
 
-function analysisMessage(templateId, eda) {
+function analysisMessage(templateId, dataType, eda) {
+  const focus = dataType === "production_parameters"
+    ? "這是生產參數資料。分析參數分布、跨產線／批次差異、漂移、離群值與品質關聯；不得把相關性寫成已證實因果。"
+    : dataType === "abnormal_records"
+      ? "這是異常紀錄。分析異常類型 Pareto、發生頻率、時間／產線／批次集中度、重複事件、處置結果與根因候選。"
+      : "資料類型尚未確定。先依檔名、欄位與內容判別是生產參數或異常紀錄；若證據不足，明確標示待確認。";
   return [
     `請分析附件中的製程 Excel，並依 ${templateId || "fuye-production-quality-v1"} 模板輸出。`,
+    focus,
     "必須區分 observed、correlated、hypothesis、validated；每項結論附資料來源、信心程度、驗證方法與限制。",
     "請涵蓋資料健檢、多產線 KPI、異常、根因候選、改善優先順序及預期 KPI。",
     eda ? `前端本機 EDA 摘要（僅供定位，仍須由原始附件驗證）：${JSON.stringify(eda)}` : "",
@@ -117,8 +125,9 @@ async function createAnalysisJob(request, env) {
   if (!fileId) throw new Error("Laplace 上傳成功，但回應中找不到 uploadFileId／fileId。");
 
   const templateId = String(formData.get("template_id") || "fuye-production-quality-v1");
+  const dataType = String(formData.get("analysis_type") || "unknown");
   const invokeBody = {
-    message: analysisMessage(templateId, compactEda(formData)),
+    message: analysisMessage(templateId, dataType, compactEda(formData)),
     attachments: [{ fileId }],
   };
   if (env.PUBLIC_WORKER_URL && env.ANALYSIS_RESULTS && env.LAPLACE_WEBHOOK_SECRET) {
