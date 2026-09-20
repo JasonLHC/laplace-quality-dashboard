@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="上傳產線 Excel，快速查看跨產線品質圖表與 Laplace AI 優化建議。"
+    />
+    <title>LineSight｜產線品質分析</title>
+    <link
+      rel="icon"
+      type="image/svg+xml"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230a1f33'/%3E%3Cpath d='M13 44h38M16 37l10-11 9 7 13-17' fill='none' stroke='%2338d5c6' stroke-width='6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar" aria-label="主要導覽">
+        <a class="brand" href="#top" aria-label="LineSight 首頁">
+          <span class="brand-mark" aria-hidden="true">
+            <svg viewBox="0 0 48 48"><path d="M8 34h32M10 29l8-9 8 6 11-14" /></svg>
+          </span>
+          <span><strong>LineSight</strong><small>品質分析平台</small></span>
+        </a>
+        <nav>
+          <a class="nav-item active" href="#overview"><span>總覽</span><b>01</b></a>
+          <a class="nav-item" href="#lines"><span>產線比較</span><b>02</b></a>
+          <a class="nav-item" href="#recommendations"><span>優化建議</span><b>03</b></a>
+        </nav>
+        <div class="connection-card">
+          <span class="status-dot" aria-hidden="true"></span>
+          <div><strong>Laplace AI</strong><small id="connectionText">示範模式</small></div>
+        </div>
+      </aside>
+
+      <main id="top">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">PRODUCTION INTELLIGENCE</p>
+            <h1>產線品質分析</h1>
+          </div>
+          <div class="topbar-actions">
+            <span class="last-updated">最後更新 <time id="lastUpdated">今日 09:42</time></span>
+            <button class="icon-button" id="refreshButton" type="button" aria-label="重新整理分析">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6v5h-5M4 18v-5h5M6.1 8a7 7 0 0 1 11.5-1.6L20 11M4 13l2.4 4.6A7 7 0 0 0 18 16" /></svg>
+            </button>
+          </div>
+        </header>
+
+        <section class="upload-panel" aria-labelledby="uploadTitle">
+          <div class="upload-copy">
+            <span class="section-index">NEW ANALYSIS</span>
+            <h2 id="uploadTitle">匯入產線資料</h2>
+            <p>上傳 Excel 或 CSV，系統會自動辨識產線、批次與品質欄位。</p>
+          </div>
+          <div class="drop-zone" id="dropZone" tabindex="0" role="button" aria-label="選擇或拖曳 Excel 檔案">
+            <input id="fileInput" type="file" accept=".xlsx,.xls,.csv" hidden />
+            <span class="upload-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M12 16V4m0 0L7.5 8.5M12 4l4.5 4.5M5 15v4h14v-4" /></svg>
+            </span>
+            <span class="file-state"><strong id="fileTitle">拖曳檔案至此，或點擊選擇</strong><small id="fileMeta">支援 XLSX、XLS、CSV，單檔上限 100 MB</small></span>
+            <button class="primary-button" id="analyzeButton" type="button" disabled>開始分析</button>
+          </div>
+          <div class="job-progress" id="jobProgress" hidden aria-live="polite">
+            <div class="progress-heading"><strong id="progressLabel">正在驗證資料格式</strong><span id="progressPercent">12%</span></div>
+            <div class="progress-track"><span id="progressBar"></span></div>
+            <p id="progressDetail">檢查工作表、欄位與時間格式</p>
+          </div>
+        </section>
+
+        <section id="overview" class="dashboard-section" aria-labelledby="overviewTitle">
+          <div class="section-heading">
+            <div><span class="section-index">QUALITY SNAPSHOT</span><h2 id="overviewTitle">品質總覽</h2></div>
+            <div class="filters" role="group" aria-label="分析篩選">
+              <button class="filter active" type="button">全部產線</button>
+              <button class="filter" type="button">最近 7 日</button>
+            </div>
+          </div>
+
+          <div class="metric-grid">
+            <article class="metric-card accent">
+              <div class="metric-top"><span>整體良率</span><span class="delta positive">↑ 0.8%</span></div>
+              <strong class="metric-value" id="overallYield">97.1<small>%</small></strong>
+              <div class="mini-bars" aria-hidden="true"><i style="height:42%"></i><i style="height:55%"></i><i style="height:51%"></i><i style="height:68%"></i><i style="height:63%"></i><i style="height:78%"></i><i style="height:88%"></i></div>
+            </article>
+            <article class="metric-card">
+              <div class="metric-top"><span>分析產線</span><span class="meta-chip">4 條</span></div>
+              <strong class="metric-value">04</strong>
+              <p>A11、A12、B07、B08</p>
+            </article>
+            <article class="metric-card warning">
+              <div class="metric-top"><span>需關注異常</span><span class="delta negative">+3</span></div>
+              <strong class="metric-value">12</strong>
+              <p>其中 4 項為高優先級</p>
+            </article>
+            <article class="metric-card">
+              <div class="metric-top"><span>有效資料</span><span class="meta-chip">完整</span></div>
+              <strong class="metric-value">128<small>K</small></strong>
+              <p>資料涵蓋率 98.6%</p>
+            </article>
+          </div>
+        </section>
+
+        <section id="lines" class="analytics-grid" aria-label="品質圖表">
+          <article class="panel trend-panel">
+            <div class="panel-heading">
+              <div><span class="section-index">YIELD TREND</span><h3>各產線良率趨勢</h3></div>
+              <div class="legend"><span><i class="a12"></i>A12</span><span><i class="others"></i>其他產線平均</span></div>
+            </div>
+            <div class="chart-wrap">
+              <svg class="line-chart" viewBox="0 0 760 250" role="img" aria-label="A12 與其他產線近七日良率趨勢">
+                <g class="grid-lines"><path d="M55 25H735M55 80H735M55 135H735M55 190H735" /><path d="M55 25V210M168 25V210M281 25V210M394 25V210M507 25V210M620 25V210M735 25V210" /></g>
+                <g class="axis-labels"><text x="14" y="30">100%</text><text x="20" y="85">98%</text><text x="20" y="140">96%</text><text x="20" y="195">94%</text><text x="48" y="235">09/13</text><text x="159" y="235">09/14</text><text x="272" y="235">09/15</text><text x="385" y="235">09/16</text><text x="498" y="235">09/17</text><text x="611" y="235">09/18</text><text x="711" y="235">今日</text></g>
+                <path class="area" d="M55 104L168 91L281 119L394 110L507 142L620 154L735 124L735 210L55 210Z" />
+                <path class="line secondary" d="M55 72L168 69L281 76L394 70L507 66L620 73L735 64" />
+                <path class="line primary" d="M55 104L168 91L281 119L394 110L507 142L620 154L735 124" />
+                <g class="points"><circle cx="55" cy="104" r="4"/><circle cx="168" cy="91" r="4"/><circle cx="281" cy="119" r="4"/><circle cx="394" cy="110" r="4"/><circle cx="507" cy="142" r="4"/><circle cx="620" cy="154" r="5"/><circle cx="735" cy="124" r="4"/></g>
+                <g class="chart-callout"><rect x="561" y="162" width="118" height="42" rx="8"/><text x="574" y="179">A12 低於基準</text><text x="574" y="195">-1.7%</text></g>
+              </svg>
+            </div>
+          </article>
+
+          <article class="panel pareto-panel">
+            <div class="panel-heading"><div><span class="section-index">DEFECT PARETO</span><h3>主要不良原因</h3></div><span class="meta-chip">本週</span></div>
+            <div class="pareto-list">
+              <div class="pareto-row"><span>鍍層厚度不足</span><div><i style="width:92%"></i></div><b>38%</b></div>
+              <div class="pareto-row"><span>表面刮傷</span><div><i style="width:61%"></i></div><b>25%</b></div>
+              <div class="pareto-row"><span>色澤差異</span><div><i style="width:42%"></i></div><b>17%</b></div>
+              <div class="pareto-row"><span>尺寸偏差</span><div><i style="width:29%"></i></div><b>12%</b></div>
+              <div class="pareto-row"><span>其他</span><div><i style="width:19%"></i></div><b>8%</b></div>
+            </div>
+          </article>
+
+          <article class="panel comparison-panel">
+            <div class="panel-heading"><div><span class="section-index">LINE COMPARISON</span><h3>產線品質比較</h3></div><button class="text-button" type="button">查看完整資料 →</button></div>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>產線</th><th>良率</th><th>趨勢</th><th>異常</th><th>狀態</th></tr></thead>
+                <tbody>
+                  <tr><td><strong>A11</strong></td><td>98.4%</td><td><span class="spark">▂▃▄▅▆▇</span></td><td>1</td><td><span class="status stable">穩定</span></td></tr>
+                  <tr class="selected"><td><strong>A12</strong></td><td>95.4%</td><td><span class="spark down">▇▆▅▅▃▄</span></td><td>7</td><td><span class="status attention">需關注</span></td></tr>
+                  <tr><td><strong>B07</strong></td><td>97.8%</td><td><span class="spark">▄▅▄▆▆▇</span></td><td>2</td><td><span class="status stable">穩定</span></td></tr>
+                  <tr><td><strong>B08</strong></td><td>96.9%</td><td><span class="spark">▄▃▅▆▅▆</span></td><td>2</td><td><span class="status watch">觀察</span></td></tr>
+                </tbody>
+              </table>
+            </div>
+          </article>
+
+          <article id="recommendations" class="panel insight-panel">
+            <div class="panel-heading">
+              <div><span class="section-index">LAPLACE AI</span><h3>優化建議</h3></div>
+              <span class="ai-badge"><i></i>分析完成</span>
+            </div>
+            <div class="insight-summary">
+              <span class="priority high">高優先</span>
+              <div><strong>A12 鍍層厚度不足與米速波動同步增加</strong><p>09/17 起異常集中於晚班，建議先核對米速、鍍金站 C/m 與當班調機紀錄。</p></div>
+            </div>
+            <ol class="action-list">
+              <li><span>01</span><div><strong>檢查 A12 晚班參數</strong><p>比對異常前後 30 分鐘的米速與電流設定。</p></div></li>
+              <li><span>02</span><div><strong>建立 C/m 預警區間</strong><p>先以穩定批次建立基準，再由工程人員確認管制界限。</p></div></li>
+              <li><span>03</span><div><strong>驗證改善結果</strong><p>下一批次追蹤良率與 XRF 實測厚度，確認是否真正改善。</p></div></li>
+            </ol>
+            <p class="evidence-note">AI 建議依據示範資料產生；正式決策前請由製程工程師確認。</p>
+          </article>
+        </section>
+
+        <footer><span>LineSight Quality Intelligence</span><span>資料與建議分層呈現 · 分析結果可追溯</span></footer>
+      </main>
+    </div>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    <script src="./app.js"></script>
+  </body>
+</html>
