@@ -42,9 +42,8 @@ window.LINESIGHT_CONFIG = {
 
 `worker/wrangler.jsonc` 中需要確認：
 
-- `LAPLACE_BASE_URL`：Laplace 完整主機網址
-- `LAPLACE_UPLOAD_PATH`：平台提供的 `/upload-file` 完整相對路徑
-- `LAPLACE_UPLOAD_FIELD`：附件表單欄位名稱，預設 `file`
+- `LAPLACE_BASE_URL`：`https://www.laplaceai.co`
+- `LAPLACE_UPLOAD_PATH`：`/api/backend/upload-file`
 - `LAPLACE_INVOKE_PATH`：已建立的 Agent 團隊端點
 - `ALLOWED_ORIGINS`：允許呼叫 Worker 的前端 origin
 
@@ -69,7 +68,7 @@ Content-Type: multipart/form-data
 - `template_id`: `fuye-production-quality-v1`
 - `eda_summary`: 瀏覽器產生的 EDA JSON
 
-Worker 會先呼叫 Laplace 上傳附件並取得 `uploadFileId`，再用 `attachments: [{ fileId }]` 呼叫 Agent 團隊。
+Worker 會先以 `multipart/form-data` 傳送 `fileName` 與 `fileToUpload`。Laplace 成功時回傳 HTTP 201 與 `uploadFileId`，Worker 再用 `attachments: [{ fileId: uploadFileId }]` 呼叫 Agent 團隊。
 
 若綁定 `ANALYSIS_RESULTS` KV、設定 `PUBLIC_WORKER_URL` 與 Webhook secret，Worker 會驗證 `X-Signature`、五分鐘時間窗並保存七天結果。
 

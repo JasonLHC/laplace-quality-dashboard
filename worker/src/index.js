@@ -105,7 +105,8 @@ async function createAnalysisJob(request, env) {
   if (!/\.(xlsx|xls|csv)$/i.test(file.name)) return json({ error: "僅支援 XLSX、XLS、CSV。" }, 415);
 
   const upstreamForm = new FormData();
-  upstreamForm.append(env.LAPLACE_UPLOAD_FIELD || "file", file, file.name);
+  upstreamForm.append("fileName", file.name);
+  upstreamForm.append("fileToUpload", file, file.name);
   const uploadResponse = await fetch(new URL(env.LAPLACE_UPLOAD_PATH, env.LAPLACE_BASE_URL), {
     method: "POST",
     headers: { authorization: `Bearer ${env.LAPLACE_ENDPOINT_SECRET}` },
