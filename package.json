@@ -1,0 +1,8 @@
+{
+  "name": "linesight-quality-dashboard",
+  "private": true,
+  "scripts": {
+    "build": "node scripts/build-bundle.cjs",
+    "test": "node --test tests/*.test.cjs"
+  }
+}

@@ -26,8 +26,9 @@
         </a>
         <nav>
           <a class="nav-item active" href="#overview"><span>總覽</span><b>01</b></a>
-          <a class="nav-item" href="#lines"><span>產線比較</span><b>02</b></a>
-          <a class="nav-item" href="#recommendations"><span>優化建議</span><b>03</b></a>
+          <a class="nav-item" href="#data-quality"><span>資料健檢</span><b>02</b></a>
+          <a class="nav-item" href="#lines"><span>產線比較</span><b>03</b></a>
+          <a class="nav-item" href="#recommendations"><span>優化建議</span><b>04</b></a>
         </nav>
         <div class="connection-card">
           <span class="status-dot" aria-hidden="true"></span>
@@ -86,30 +87,46 @@
               <div class="mini-bars" aria-hidden="true"><i style="height:42%"></i><i style="height:55%"></i><i style="height:51%"></i><i style="height:68%"></i><i style="height:63%"></i><i style="height:78%"></i><i style="height:88%"></i></div>
             </article>
             <article class="metric-card">
-              <div class="metric-top"><span>分析產線</span><span class="meta-chip">4 條</span></div>
-              <strong class="metric-value">04</strong>
-              <p>A11、A12、B07、B08</p>
+              <div class="metric-top"><span>辨識產線</span><span class="meta-chip" id="lineCountChip">示範</span></div>
+              <strong class="metric-value" id="lineCount">04</strong>
+              <p id="lineNames">A11、A12、B07、B08</p>
             </article>
             <article class="metric-card warning">
-              <div class="metric-top"><span>需關注異常</span><span class="delta negative">+3</span></div>
-              <strong class="metric-value">12</strong>
-              <p>其中 4 項為高優先級</p>
+              <div class="metric-top"><span>數值欄位</span><span class="delta negative" id="numericStatus">示範</span></div>
+              <strong class="metric-value" id="numericColumnCount">12</strong>
+              <p id="numericColumnNote">匯入後顯示自動辨識結果</p>
             </article>
             <article class="metric-card">
-              <div class="metric-top"><span>有效資料</span><span class="meta-chip">完整</span></div>
-              <strong class="metric-value">128<small>K</small></strong>
-              <p>資料涵蓋率 98.6%</p>
+              <div class="metric-top"><span>有效資料</span><span class="meta-chip" id="dataStatus">示範</span></div>
+              <strong class="metric-value" id="rowCount">128<small>K</small></strong>
+              <p id="coverageNote">匯入後顯示資料涵蓋率</p>
             </article>
+          </div>
+        </section>
+
+        <section id="data-quality" class="panel data-quality-panel" aria-labelledby="dataQualityTitle">
+          <div class="panel-heading">
+            <div><span class="section-index">DATA AUDIT</span><h3 id="dataQualityTitle">資料健檢</h3></div>
+            <span class="meta-chip" id="edaMode">等待匯入</span>
+          </div>
+          <div class="audit-summary" id="auditSummary">
+            <p>Excel 會在目前瀏覽器內解析；選取檔案後即可查看工作表、欄位型態、缺失率與離群值摘要。</p>
+          </div>
+          <div class="table-wrap" id="auditTableWrap" hidden>
+            <table>
+              <thead><tr><th>欄位</th><th>型態</th><th>缺失率</th><th>平均</th><th>標準差</th><th>離群值</th></tr></thead>
+              <tbody id="auditTableBody"></tbody>
+            </table>
           </div>
         </section>
 
         <section id="lines" class="analytics-grid" aria-label="品質圖表">
           <article class="panel trend-panel">
             <div class="panel-heading">
-              <div><span class="section-index">YIELD TREND</span><h3>各產線良率趨勢</h3></div>
+              <div><span class="section-index">YIELD OVERVIEW</span><h3 id="primaryChartTitle">各產線良率趨勢</h3></div>
               <div class="legend"><span><i class="a12"></i>A12</span><span><i class="others"></i>其他產線平均</span></div>
             </div>
-            <div class="chart-wrap">
+            <div class="chart-wrap" id="primaryChart">
               <svg class="line-chart" viewBox="0 0 760 250" role="img" aria-label="A12 與其他產線近七日良率趨勢">
                 <g class="grid-lines"><path d="M55 25H735M55 80H735M55 135H735M55 190H735" /><path d="M55 25V210M168 25V210M281 25V210M394 25V210M507 25V210M620 25V210M735 25V210" /></g>
                 <g class="axis-labels"><text x="14" y="30">100%</text><text x="20" y="85">98%</text><text x="20" y="140">96%</text><text x="20" y="195">94%</text><text x="48" y="235">09/13</text><text x="159" y="235">09/14</text><text x="272" y="235">09/15</text><text x="385" y="235">09/16</text><text x="498" y="235">09/17</text><text x="611" y="235">09/18</text><text x="711" y="235">今日</text></g>
@@ -124,7 +141,7 @@
 
           <article class="panel pareto-panel">
             <div class="panel-heading"><div><span class="section-index">DEFECT PARETO</span><h3>主要不良原因</h3></div><span class="meta-chip">本週</span></div>
-            <div class="pareto-list">
+            <div class="pareto-list" id="defectChart">
               <div class="pareto-row"><span>鍍層厚度不足</span><div><i style="width:92%"></i></div><b>38%</b></div>
               <div class="pareto-row"><span>表面刮傷</span><div><i style="width:61%"></i></div><b>25%</b></div>
               <div class="pareto-row"><span>色澤差異</span><div><i style="width:42%"></i></div><b>17%</b></div>
@@ -138,7 +155,7 @@
             <div class="table-wrap">
               <table>
                 <thead><tr><th>產線</th><th>良率</th><th>趨勢</th><th>異常</th><th>狀態</th></tr></thead>
-                <tbody>
+                <tbody id="lineTableBody">
                   <tr><td><strong>A11</strong></td><td>98.4%</td><td><span class="spark">▂▃▄▅▆▇</span></td><td>1</td><td><span class="status stable">穩定</span></td></tr>
                   <tr class="selected"><td><strong>A12</strong></td><td>95.4%</td><td><span class="spark down">▇▆▅▅▃▄</span></td><td>7</td><td><span class="status attention">需關注</span></td></tr>
                   <tr><td><strong>B07</strong></td><td>97.8%</td><td><span class="spark">▄▅▄▆▆▇</span></td><td>2</td><td><span class="status stable">穩定</span></td></tr>
@@ -151,7 +168,7 @@
           <article id="recommendations" class="panel insight-panel">
             <div class="panel-heading">
               <div><span class="section-index">LAPLACE AI</span><h3>優化建議</h3></div>
-              <span class="ai-badge"><i></i>分析完成</span>
+              <span class="ai-badge" id="aiStatus"><i></i>示範內容</span>
             </div>
             <div class="insight-summary">
               <span class="priority high">高優先</span>
@@ -171,6 +188,7 @@
     </div>
 
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
-    <script src="./app.js"></script>
+    <script src="./config.js?v=2"></script>
+    <script src="./bundle.js?v=2"></script>
   </body>
 </html>

@@ -99,6 +99,16 @@ h1 { margin: 0; font-size: 1.55rem; letter-spacing: -.025em; }
 
 .analytics-grid { margin-top: 14px; display: grid; grid-template-columns: minmax(0, 1.65fr) minmax(310px, .9fr); gap: 14px; align-items: stretch; }
 .panel { min-width: 0; padding: 20px; background: white; border: 1px solid var(--line); border-radius: 11px; scroll-margin-top: 20px; }
+.data-quality-panel { margin-top: 14px; }
+.audit-summary { color: var(--muted); font-size: .76rem; line-height: 1.65; }
+.audit-summary > p { margin: 12px 0 0; }
+.audit-facts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.audit-facts > div { padding: 13px; background: #f4f8f8; border: 1px solid #e5edef; border-radius: 8px; }
+.audit-facts b, .audit-facts span { display: block; }
+.audit-facts b { color: var(--ink); font: 700 1.15rem/1 ui-monospace, monospace; }
+.audit-facts span { margin-top: 6px; font-size: .66rem; }
+.data-quality-panel .table-wrap { margin-top: 15px; max-height: 360px; overflow: auto; }
+.data-quality-panel thead { position: sticky; top: 0; z-index: 1; }
 .panel-heading { margin-bottom: 16px; }
 .panel-heading h3 { margin: 5px 0 0; font-size: .98rem; }
 .legend { display: flex; gap: 14px; color: var(--muted); font-size: .68rem; }
@@ -107,6 +117,13 @@ h1 { margin: 0; font-size: 1.55rem; letter-spacing: -.025em; }
 .legend .a12 { background: var(--teal); }
 .legend .others { background: #91a2ad; }
 .chart-wrap { overflow-x: auto; }
+.quality-bars { min-height: 220px; display: grid; align-content: center; gap: 15px; padding: 10px 4px; }
+.quality-bar { display: grid; grid-template-columns: 100px minmax(120px, 1fr) 82px; align-items: center; gap: 11px; font-size: .72rem; }
+.quality-bar > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.quality-bar > div { height: 10px; overflow: hidden; background: #edf2f4; border-radius: 999px; }
+.quality-bar i { display: block; height: 100%; background: linear-gradient(90deg, var(--teal), var(--teal-bright)); border-radius: inherit; }
+.quality-bar b { text-align: right; font-family: ui-monospace, monospace; }
+.empty-state { margin: 0; padding: 34px 12px; color: var(--muted); text-align: center; font-size: .74rem; line-height: 1.6; }
 .line-chart { width: 100%; min-width: 560px; height: auto; display: block; }
 .grid-lines path { fill: none; stroke: #e4ebee; stroke-width: 1; }
 .axis-labels { fill: #8999a4; font-size: 10px; font-family: ui-monospace, monospace; }
@@ -187,6 +204,8 @@ footer { margin-top: 22px; padding: 18px 2px 0; border-top: 1px solid var(--line
   .job-progress { grid-column: 1; }
   .metric-grid { grid-template-columns: 1fr 1fr; }
   .metric-card { min-height: 132px; }
+  .audit-facts { grid-template-columns: 1fr 1fr; }
+  .quality-bar { grid-template-columns: 78px minmax(80px, 1fr) 70px; }
   .section-heading { align-items: flex-end; }
   footer { display: grid; gap: 6px; }
 }

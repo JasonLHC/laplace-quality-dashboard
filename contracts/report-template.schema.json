@@ -1,0 +1,93 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://linesight.example/schemas/fuye-production-quality-v1.json",
+  "title": "福業電子多產線品質分析報告",
+  "type": "object",
+  "required": ["template_id", "run", "data_quality", "kpis", "findings", "recommendations", "limitations", "executive_summary"],
+  "properties": {
+    "template_id": { "const": "fuye-production-quality-v1" },
+    "run": {
+      "type": "object",
+      "required": ["status", "source_files"],
+      "properties": {
+        "run_id": { "type": ["string", "null"] },
+        "status": { "enum": ["accepted", "running", "completed", "failed", "capability_limit"] },
+        "source_files": { "type": "array", "items": { "type": "string" } },
+        "generated_at": { "type": "string", "format": "date-time" }
+      },
+      "additionalProperties": true
+    },
+    "data_quality": { "type": "object" },
+    "lines": { "type": "array", "items": { "type": "object" } },
+    "kpis": { "type": "array", "items": { "$ref": "#/$defs/metric" } },
+    "charts": { "type": "array", "items": { "$ref": "#/$defs/chart" } },
+    "findings": { "type": "array", "items": { "$ref": "#/$defs/finding" } },
+    "recommendations": { "type": "array", "items": { "$ref": "#/$defs/recommendation" } },
+    "limitations": { "type": "array", "items": { "type": "string" } },
+    "executive_summary": { "type": "string" }
+  },
+  "$defs": {
+    "evidence": {
+      "type": "object",
+      "required": ["source", "description"],
+      "properties": {
+        "source": { "type": "string" },
+        "sheet": { "type": ["string", "null"] },
+        "range": { "type": ["string", "null"] },
+        "description": { "type": "string" },
+        "strength": { "enum": ["strong", "medium", "weak"] }
+      }
+    },
+    "metric": {
+      "type": "object",
+      "required": ["name", "value"],
+      "properties": {
+        "name": { "type": "string" },
+        "value": { "type": ["number", "string", "null"] },
+        "unit": { "type": ["string", "null"] },
+        "scope": { "type": ["string", "null"] },
+        "method": { "type": ["string", "null"] }
+      }
+    },
+    "chart": {
+      "type": "object",
+      "required": ["chart_id", "type", "title", "series"],
+      "properties": {
+        "chart_id": { "type": "string" },
+        "type": { "enum": ["line", "bar", "pareto", "scatter", "box", "control", "timeline"] },
+        "title": { "type": "string" },
+        "x": { "type": "array" },
+        "series": { "type": "array" },
+        "unit": { "type": ["string", "null"] },
+        "annotations": { "type": "array" },
+        "source_refs": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "finding": {
+      "type": "object",
+      "required": ["finding_id", "title", "cause_status", "confidence", "evidence"],
+      "properties": {
+        "finding_id": { "type": "string" },
+        "title": { "type": "string" },
+        "scope": { "type": ["string", "null"] },
+        "observation": { "type": "string" },
+        "cause_status": { "enum": ["observed", "correlated", "hypothesis", "validated"] },
+        "confidence": { "enum": ["high", "medium", "low"] },
+        "evidence": { "type": "array", "items": { "$ref": "#/$defs/evidence" } }
+      }
+    },
+    "recommendation": {
+      "type": "object",
+      "required": ["title", "priority", "action", "validation_test"],
+      "properties": {
+        "title": { "type": "string" },
+        "priority": { "enum": ["high", "medium", "low"] },
+        "action": { "type": "string" },
+        "owner": { "type": ["string", "null"] },
+        "validation_test": { "type": "string" },
+        "expected_kpi": { "type": ["string", "null"] },
+        "related_findings": { "type": "array", "items": { "type": "string" } }
+      }
+    }
+  }
+}

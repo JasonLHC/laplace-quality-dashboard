@@ -1,0 +1,5 @@
+{
+  "name": "linesight-laplace-gateway",
+  "private": true,
+  "type": "module"
+}

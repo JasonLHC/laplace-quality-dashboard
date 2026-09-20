@@ -1,0 +1,3 @@
+LAPLACE_ENDPOINT_SECRET=replace-locally
+LAPLACE_WEBHOOK_SECRET=replace-locally
+PUBLIC_WORKER_URL=https://replace-with-worker.workers.dev
