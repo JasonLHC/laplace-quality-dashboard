@@ -1,6 +1,7 @@
 const DEFAULT_ORIGIN = "https://jasonlhc.github.io";
-const MAX_REQUEST_BYTES = 1024 * 1024;
-const SUPPORTED_DATA_TYPES = new Set(["production_parameters", "abnormal_records", "unknown"]);
+const MAX_FILE_BYTES = 50 * 1024 * 1024;
+const MAX_FILES = 2;
+const SUPPORTED_EXTENSIONS = new Set(["xlsx", "xls", "csv"]);
 
 function json(payload, status = 200, headers = {}) {
   return new Response(JSON.stringify(payload), {
@@ -37,153 +38,157 @@ function requireConfiguration(env) {
   if (missing.length) throw new Error(`Worker 尚未設定：${missing.join(", ")}`);
 }
 
-async function upstreamJson(response, operation) {
+class UpstreamError extends Error {
+  constructor(operation, status, payload) {
+    const detail = payload?.message || payload?.error?.message || payload?.detail || `HTTP ${status}`;
+    super(`${operation}失敗：${detail}`);
+    this.status = status;
+    this.code = payload?.code || payload?.error?.code;
+    this.requestId = payload?.requestId || payload?.error?.requestId;
+  }
+}
+
+async function readUpstream(response, operation) {
   const text = await response.text();
   let payload;
   try {
     payload = text ? JSON.parse(text) : {};
   } catch {
-    throw new Error(`${operation}回傳非 JSON 內容（HTTP ${response.status}）`);
+    payload = { message: `回傳非 JSON 內容（HTTP ${response.status}）` };
   }
-  if (!response.ok) {
-    const detail = payload.message || payload.error || `HTTP ${response.status}`;
-    throw new Error(`${operation}失敗：${detail}`);
-  }
+  if (!response.ok) throw new UpstreamError(operation, response.status, payload);
   return payload;
 }
 
+function endpointUrl(env, suffix) {
+  const basePath = String(env.LAPLACE_INVOKE_PATH).replace(/\/$/, "");
+  return new URL(`${basePath}${suffix}`, env.LAPLACE_BASE_URL);
+}
+
+function bearerHeaders(env, extra = {}) {
+  return { authorization: `Bearer ${env.LAPLACE_ENDPOINT_SECRET}`, ...extra };
+}
+
 function extractJobId(payload) {
-  return payload.job_id || payload.jobId || payload.run_id || payload.runId || payload.id || payload.data?.id || null;
+  return payload?.data?.jobId || payload?.data?.job_id || payload?.jobId || payload?.job_id || payload?.id || null;
 }
 
-async function parseRequestJson(request) {
-  const declaredLength = Number(request.headers.get("content-length") || 0);
-  if (declaredLength > MAX_REQUEST_BYTES) throw new Response(JSON.stringify({ error: "EDA 摘要超過 1 MB。" }), { status: 413 });
-  const raw = await request.text();
-  if (new TextEncoder().encode(raw).byteLength > MAX_REQUEST_BYTES) {
-    throw new Response(JSON.stringify({ error: "EDA 摘要超過 1 MB。" }), { status: 413 });
+function extractFileId(payload) {
+  return payload?.data?.fileId || payload?.data?.file_id || payload?.fileId || payload?.file_id || null;
+}
+
+function extensionOf(fileName) {
+  return String(fileName || "").split(".").pop()?.toLowerCase() || "";
+}
+
+function validateFiles(files) {
+  if (!files.length) throw new Response(JSON.stringify({ error: "請至少上傳一份 Excel 或 CSV。" }), { status: 400 });
+  if (files.length > MAX_FILES) throw new Response(JSON.stringify({ error: `一次最多上傳 ${MAX_FILES} 份檔案。` }), { status: 400 });
+  for (const file of files) {
+    if (!(file instanceof File) || !SUPPORTED_EXTENSIONS.has(extensionOf(file.name))) {
+      throw new Response(JSON.stringify({ error: "僅支援 XLSX、XLS 或 CSV。" }), { status: 400 });
+    }
+    if (file.size > MAX_FILE_BYTES) {
+      throw new Response(JSON.stringify({ error: `${file.name} 超過 50 MB。` }), { status: 413 });
+    }
   }
-  try {
-    return JSON.parse(raw);
-  } catch {
-    throw new Response(JSON.stringify({ error: "請求內容不是有效 JSON。" }), { status: 400 });
+}
+
+function parseEdaSummaries(form) {
+  const reports = [];
+  for (const value of form.getAll("eda_summary")) {
+    if (typeof value !== "string" || !value.trim()) continue;
+    try {
+      reports.push(JSON.parse(value));
+    } catch {
+      throw new Response(JSON.stringify({ error: "eda_summary 不是有效 JSON。" }), { status: 400 });
+    }
   }
+  return reports;
 }
 
-function compactEda(report) {
-  if (!report || typeof report !== "object" || Array.isArray(report)) return null;
-  const dataType = String(report.data_type || "unknown");
-  if (!SUPPORTED_DATA_TYPES.has(dataType)) return null;
-  if (!report.input_summary || !report.data_quality || !report.kpis) return null;
-  return {
-    template_id: String(report.template_id || "fuye-production-quality-v1").slice(0, 100),
-    data_type: dataType,
-    classification: report.classification,
-    generated_at: report.generated_at,
-    input_summary: report.input_summary,
-    data_quality: {
-      missing_cell_count: report.data_quality.missing_cell_count,
-      missing_rate: report.data_quality.missing_rate,
-      numeric_column_count: report.data_quality.numeric_column_count,
-      columns: Array.isArray(report.data_quality.columns) ? report.data_quality.columns.slice(0, 150) : [],
-      sheets: Array.isArray(report.data_quality.sheets) ? report.data_quality.sheets.slice(0, 30) : [],
-    },
-    kpis: report.kpis,
-    lines: Array.isArray(report.lines) ? report.lines.slice(0, 30) : [],
-    defects: Array.isArray(report.defects) ? report.defects.slice(0, 20) : [],
-    limitations: Array.isArray(report.limitations) ? report.limitations.slice(0, 20) : [],
-  };
-}
-
-function analysisMessage(templateId, dataType, eda) {
-  const focus = dataType === "production_parameters"
-    ? "這是生產參數資料。分析參數分布、跨產線／批次差異、漂移、離群值與品質關聯；不得把相關性寫成已證實因果。"
-    : dataType === "abnormal_records"
-      ? "這是異常紀錄。分析異常類型 Pareto、發生頻率、時間／產線／批次集中度、重複事件、處置結果與根因候選。"
-      : "資料類型尚未確定。先依檔名、欄位與內容判別是生產參數或異常紀錄；若證據不足，明確標示待確認。";
+function analysisMessage(files, reports) {
+  const summaries = reports.map((report) => ({
+    file_name: report?.input_summary?.file_name,
+    data_type: report?.data_type,
+    row_count: report?.input_summary?.row_count,
+    column_count: report?.input_summary?.column_count,
+    missing_rate: report?.data_quality?.missing_rate,
+  }));
   return [
-    `請分析下方由使用者瀏覽器計算的 Excel EDA JSON，並依 ${templateId || "fuye-production-quality-v1"} 模板輸出。`,
-    focus,
-    "你無法取得原始 Excel 或逐列資料，不得聲稱已讀取附件；超出摘要證據的內容必須標示為待驗證或資料限制。",
-    "必須區分 observed、correlated、hypothesis、validated；每項結論附資料來源、信心程度、驗證方法與限制。",
-    "請涵蓋資料健檢、多產線 KPI、異常、根因候選、改善優先順序及預期 KPI。",
-    `前端本機 EDA 摘要：${JSON.stringify(eda)}`,
+    "請現在立即使用 fetch_uploaded_file 工具讀取所有附件並完成分析，不要只描述計畫或下一步。",
+    "請輸出資料健檢、欄位與筆數證據、產線或批次品質差異、異常 Pareto、可能根因、可執行改善建議與限制。",
+    "每項結論請區分 observed、correlated、hypothesis、validated；不得把相關性寫成已證實因果。",
+    `附件：${files.map((file) => file.name).join("、")}`,
+    summaries.length ? `瀏覽器 EDA 索引：${JSON.stringify(summaries)}` : "",
   ].filter(Boolean).join("\n");
+}
+
+async function uploadFile(file, env) {
+  const body = new FormData();
+  body.append("fileToUpload", file, file.name);
+  const response = await fetch(endpointUrl(env, "/files"), {
+    method: "POST",
+    headers: bearerHeaders(env),
+    body,
+  });
+  const payload = await readUpstream(response, `Laplace 檔案上傳（${file.name}）`);
+  const fileId = extractFileId(payload);
+  if (!fileId) throw new UpstreamError("Laplace 檔案上傳", 502, { message: "成功回應缺少 data.fileId" });
+  return fileId;
 }
 
 async function createAnalysisJob(request, env) {
   requireConfiguration(env);
-  const payload = await parseRequestJson(request);
-  const eda = compactEda(payload.eda_summary);
-  if (!eda) return json({ error: "缺少有效的 eda_summary。" }, 400);
-  const templateId = String(payload.template_id || eda.template_id || "fuye-production-quality-v1").slice(0, 100);
-  const dataType = SUPPORTED_DATA_TYPES.has(payload.analysis_type) ? payload.analysis_type : eda.data_type;
-  const invokeBody = {
-    message: analysisMessage(templateId, dataType, eda),
-  };
-  if (env.PUBLIC_WORKER_URL && env.ANALYSIS_RESULTS && env.LAPLACE_WEBHOOK_SECRET) {
-    invokeBody.webhookUrl = `${String(env.PUBLIC_WORKER_URL).replace(/\/$/, "")}/api/webhooks/laplace`;
+  const contentType = request.headers.get("content-type") || "";
+  if (!contentType.includes("multipart/form-data")) {
+    return json({ error: "請使用 multipart/form-data 上傳 Excel 或 CSV。" }, 415);
   }
+  const form = await request.formData();
+  const files = [...form.getAll("files"), ...form.getAll("file")].filter((value) => value instanceof File);
+  validateFiles(files);
+  const reports = parseEdaSummaries(form);
+  const fileIds = [];
+  for (const file of files) fileIds.push(await uploadFile(file, env));
 
-  const invokeResponse = await fetch(new URL(env.LAPLACE_INVOKE_PATH, env.LAPLACE_BASE_URL), {
+  const response = await fetch(endpointUrl(env, "/jobs"), {
     method: "POST",
-    headers: {
-      authorization: `Bearer ${env.LAPLACE_ENDPOINT_SECRET}`,
-      "content-type": "application/json",
-    },
-    body: JSON.stringify(invokeBody),
+    headers: bearerHeaders(env, { "content-type": "application/json" }),
+    body: JSON.stringify({
+      message: analysisMessage(files, reports),
+      locale: "zh-TW",
+      attachments: fileIds.map((fileId) => ({ fileId })),
+    }),
   });
-  const invokePayload = await upstreamJson(invokeResponse, "Laplace Agent 呼叫");
-  return json({
-    status: invokeResponse.status === 202 ? "accepted" : "completed",
-    job_id: extractJobId(invokePayload),
-    message: "Laplace Agent 團隊已收到 EDA 摘要；原始檔案未上傳。",
-    result: invokePayload,
-  }, invokeResponse.status === 202 ? 202 : 200);
-}
-
-function hex(bytes) {
-  return [...new Uint8Array(bytes)].map((value) => value.toString(16).padStart(2, "0")).join("");
-}
-
-function safeEqual(left, right) {
-  if (left.length !== right.length) return false;
-  let difference = 0;
-  for (let index = 0; index < left.length; index += 1) difference |= left.charCodeAt(index) ^ right.charCodeAt(index);
-  return difference === 0;
-}
-
-async function verifyWebhook(request, secret, rawBody) {
-  const signature = request.headers.get("x-signature") || "";
-  const timestamp = request.headers.get("x-timestamp") || "";
-  const seconds = Number(timestamp);
-  if (!Number.isFinite(seconds) || Math.abs(Date.now() / 1000 - seconds) > 300) return false;
-  const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
-  const digest = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(`${timestamp}.${rawBody}`));
-  return safeEqual(signature, `sha256=${hex(digest)}`);
-}
-
-async function receiveWebhook(request, env) {
-  if (!env.LAPLACE_WEBHOOK_SECRET) return json({ error: "Webhook secret 尚未設定。" }, 503);
-  const rawBody = await request.text();
-  if (!(await verifyWebhook(request, env.LAPLACE_WEBHOOK_SECRET, rawBody))) return json({ error: "Webhook 簽章無效。" }, 401);
-  let payload;
-  try {
-    payload = JSON.parse(rawBody);
-  } catch {
-    return json({ error: "Webhook 內容不是有效 JSON。" }, 400);
-  }
+  const payload = await readUpstream(response, "Laplace 分析任務建立");
   const jobId = extractJobId(payload);
-  if (!jobId) return json({ error: "Webhook 缺少任務識別碼。" }, 400);
-  if (!env.ANALYSIS_RESULTS) return json({ error: "ANALYSIS_RESULTS KV 尚未綁定。" }, 503);
-  await env.ANALYSIS_RESULTS.put(`job:${jobId}`, JSON.stringify(payload), { expirationTtl: 7 * 24 * 60 * 60 });
-  return new Response(null, { status: 204 });
+  if (!jobId) throw new UpstreamError("Laplace 分析任務建立", 502, { message: "成功回應缺少 jobId" });
+  return json({
+    status: payload.status || payload?.data?.status || "queued",
+    job_id: jobId,
+    message: `${files.length} 份檔案已送交 Laplace 虛擬團隊。`,
+    request_id: payload.requestId || payload?.data?.requestId,
+  }, response.status === 202 ? 202 : 200);
 }
 
 async function getAnalysisJob(jobId, env) {
-  if (!env.ANALYSIS_RESULTS) return json({ error: "ANALYSIS_RESULTS KV 尚未綁定。" }, 503);
-  const result = await env.ANALYSIS_RESULTS.get(`job:${jobId}`, "json");
-  return result ? json({ status: "completed", job_id: jobId, result }) : json({ status: "pending", job_id: jobId }, 202);
+  requireConfiguration(env);
+  const response = await fetch(endpointUrl(env, `/jobs/${encodeURIComponent(jobId)}`), {
+    headers: bearerHeaders(env),
+  });
+  const payload = await readUpstream(response, "Laplace 分析任務查詢");
+  const data = payload?.data || payload;
+  return json({
+    status: data.status,
+    job_id: data.jobId || data.job_id || jobId,
+    result: data.result,
+    request_id: payload.requestId || data.requestId,
+  });
+}
+
+function withCors(response, cors) {
+  Object.entries(cors).forEach(([name, value]) => response.headers.set(name, value));
+  return response;
 }
 
 export default {
@@ -196,23 +201,25 @@ export default {
         return json({ ok: true, laplace_configured: Boolean(env.LAPLACE_ENDPOINT_SECRET) }, 200, cors);
       }
       if (request.method === "POST" && url.pathname === "/api/analysis-jobs") {
-        const response = await createAnalysisJob(request, env);
-        Object.entries(cors).forEach(([name, value]) => response.headers.set(name, value));
-        return response;
+        return withCors(await createAnalysisJob(request, env), cors);
       }
-      if (request.method === "POST" && url.pathname === "/api/webhooks/laplace") return receiveWebhook(request, env);
       const match = url.pathname.match(/^\/api\/analysis-jobs\/([^/]+)$/);
       if (request.method === "GET" && match) {
-        const response = await getAnalysisJob(decodeURIComponent(match[1]), env);
-        Object.entries(cors).forEach(([name, value]) => response.headers.set(name, value));
-        return response;
+        return withCors(await getAnalysisJob(decodeURIComponent(match[1]), env), cors);
       }
       return json({ error: "Not found" }, 404, cors);
     } catch (error) {
       if (error instanceof Response) {
-        Object.entries(cors).forEach(([name, value]) => error.headers.set(name, value));
         if (!error.headers.has("content-type")) error.headers.set("content-type", "application/json; charset=utf-8");
-        return error;
+        return withCors(error, cors);
+      }
+      if (error instanceof UpstreamError) {
+        return json({
+          error: error.message,
+          code: error.code,
+          request_id: error.requestId,
+          upstream_status: error.status,
+        }, error.status, cors);
       }
       return json({ error: error instanceof Error ? error.message : "Unexpected error" }, 502, cors);
     }

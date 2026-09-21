@@ -5,8 +5,7 @@
   "compatibility_date": "2026-09-20",
   "vars": {
     "ALLOWED_ORIGINS": "https://jasonlhc.github.io",
-    "LAPLACE_BASE_URL": "https://ai-api.laplaceai.co",
-    "LAPLACE_INVOKE_PATH": "/api/v1/invoke/ep_f95eafc98111934f6e0ae4b10a53a3f7",
-    "PUBLIC_WORKER_URL": "https://linesight-laplace-gateway.jasontw93.workers.dev"
+    "LAPLACE_BASE_URL": "https://backend-api.laplaceai.co",
+    "LAPLACE_INVOKE_PATH": "/api/v1/invoke/ep_5ae0950e03ce9069204dd07c670af152"
   }
 }

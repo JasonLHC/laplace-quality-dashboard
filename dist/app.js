@@ -19,11 +19,11 @@ const elements = {
   connectionText: document.querySelector("#connectionText"),
 };
 
-let selectedFile = null;
+let selectedFiles = [];
 let latestEda = null;
 
 elements.connectionText.textContent = API_BASE ? "Agent API 已設定" : "本機 EDA 模式";
-elements.fileMeta.textContent = "支援 XLSX、XLS、CSV，單檔上限 50 MB";
+elements.fileMeta.textContent = "支援 XLSX、XLS、CSV，最多兩份、單檔上限 50 MB";
 
 function formatBytes(bytes) {
   if (!bytes) return "0 KB";
@@ -60,21 +60,28 @@ function updateProgress(percent, label, detail) {
   elements.progressBar.style.width = `${percent}%`;
 }
 
-function setFile(file) {
-  if (!file) return;
-  const extension = file.name.split(".").pop()?.toLowerCase();
-  if (!["xlsx", "xls", "csv"].includes(extension)) {
-    showToast("請選擇 XLSX、XLS 或 CSV 檔案。");
+function setFiles(fileList) {
+  const files = [...(fileList || [])];
+  if (!files.length) return;
+  if (files.length > 2) {
+    showToast("一次最多選擇兩份檔案。");
     return;
   }
-  if (file.size > MAX_FILE_BYTES) {
-    showToast("檔案超過 50 MB；為維持瀏覽器穩定度，請先拆分檔案。");
-    return;
+  for (const file of files) {
+    const extension = file.name.split(".").pop()?.toLowerCase();
+    if (!["xlsx", "xls", "csv"].includes(extension)) {
+      showToast("請選擇 XLSX、XLS 或 CSV 檔案。");
+      return;
+    }
+    if (file.size > MAX_FILE_BYTES) {
+      showToast(`${file.name} 超過 50 MB；請先拆分檔案。`);
+      return;
+    }
   }
-  selectedFile = file;
+  selectedFiles = files;
   latestEda = null;
-  elements.fileTitle.textContent = file.name;
-  elements.fileMeta.textContent = `${formatBytes(file.size)} · 等待本機資料健檢`;
+  elements.fileTitle.textContent = files.map((file) => file.name).join("、");
+  elements.fileMeta.textContent = `${files.length} 份 · ${formatBytes(files.reduce((sum, file) => sum + file.size, 0))} · 等待本機資料健檢`;
   elements.analyzeButton.textContent = "開始分析";
   elements.analyzeButton.disabled = false;
 }
@@ -88,7 +95,7 @@ elements.dropZone.addEventListener("keydown", (event) => {
     elements.fileInput.click();
   }
 });
-elements.fileInput.addEventListener("change", () => setFile(elements.fileInput.files?.[0]));
+elements.fileInput.addEventListener("change", () => setFiles(elements.fileInput.files));
 
 ["dragenter", "dragover"].forEach((eventName) => {
   elements.dropZone.addEventListener(eventName, (event) => {
@@ -102,7 +109,7 @@ elements.fileInput.addEventListener("change", () => setFile(elements.fileInput.f
     elements.dropZone.classList.remove("dragover");
   });
 });
-elements.dropZone.addEventListener("drop", (event) => setFile(event.dataTransfer?.files?.[0]));
+elements.dropZone.addEventListener("drop", (event) => setFiles(event.dataTransfer?.files));
 
 async function readWorkbook(file) {
   if (!XLSX_LIB) throw new Error("Excel 解析模組載入失敗，請重新整理頁面。");
@@ -259,38 +266,64 @@ async function runLocalEda(file) {
   return report;
 }
 
-async function submitToApi(report) {
-  updateProgress(62, "正在送出 EDA 摘要", "原始 Excel 留在瀏覽器；Cloudflare 僅轉送統計摘要");
+function renderAgentResult(result) {
+  const content = result?.message?.content || result?.content || "Agent 已完成，但沒有回傳文字內容。";
+  document.querySelector("#aiStatus").innerHTML = "<i></i>Agent 已完成";
+  document.querySelector(".insight-summary").innerHTML = `
+    <span class="priority high">AI</span>
+    <div><strong>Laplace 虛擬團隊分析</strong><p>${escapeHtml(content).replace(/\n/g, "<br>")}</p></div>`;
+}
+
+async function waitForJob(jobId) {
+  for (let attempt = 1; attempt <= 60; attempt += 1) {
+    await new Promise((resolve) => window.setTimeout(resolve, 5000));
+    const response = await fetch(`${API_BASE}/api/analysis-jobs/${encodeURIComponent(jobId)}`);
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(payload.error || `查詢分析任務失敗（${response.status}）`);
+    const status = String(payload.status || "").toLowerCase();
+    updateProgress(Math.min(95, 72 + attempt), "Agent 正在分析附件", `任務 ${jobId} · ${payload.status || "running"}`);
+    if (status === "done" || status === "completed") return payload;
+    if (["failed", "error", "cancelled", "canceled"].includes(status)) {
+      throw new Error(payload.error || `Laplace 任務狀態：${payload.status}`);
+    }
+  }
+  throw new Error("Agent 分析超過五分鐘，請稍後重新查詢任務。");
+}
+
+async function submitToApi(files, reports) {
+  updateProgress(62, "正在安全上傳", "Cloudflare 將檔案轉送至 Laplace；API key 不會傳到瀏覽器");
+  const body = new FormData();
+  files.forEach((file) => body.append("files", file));
+  reports.forEach((report) => body.append("eda_summary", JSON.stringify(report)));
   const response = await fetch(`${API_BASE}/api/analysis-jobs`, {
     method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      analysis_type: report.data_type,
-      template_id: report.template_id,
-      eda_summary: report,
-    }),
+    body,
   });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(payload.error || `建立分析任務失敗（${response.status}）`);
-  updateProgress(100, "Agent 任務已建立", payload.message || "Laplace Agent 團隊已收到分析資料");
+  updateProgress(72, "Agent 任務已建立", payload.message || "Laplace Agent 團隊已收到附件");
   document.querySelector("#aiStatus").innerHTML = "<i></i>Agent 已接收";
-  return payload;
+  const completed = await waitForJob(payload.job_id);
+  updateProgress(100, "Agent 分析完成", `任務 ${payload.job_id}`);
+  renderAgentResult(completed.result);
+  return { ...payload, completed };
 }
 
 elements.analyzeButton.addEventListener("click", async (event) => {
   event.stopPropagation();
-  if (!selectedFile) return;
+  if (!selectedFiles.length) return;
   elements.analyzeButton.disabled = true;
   try {
-    const report = await runLocalEda(selectedFile);
+    const reports = [];
+    for (const file of selectedFiles) reports.push(await runLocalEda(file));
     if (API_BASE) {
-      const job = await submitToApi(report);
+      const job = await submitToApi(selectedFiles, reports);
       showToast(`分析任務已建立${job.job_id ? `：${job.job_id}` : ""}`);
-      elements.fileMeta.textContent = `${formatBytes(selectedFile.size)} · 原始檔未上傳 · EDA 摘要已送交 Agent`;
+      elements.fileMeta.textContent = `${selectedFiles.length} 份檔案 · 已送交 Laplace Agent`;
     } else {
       updateProgress(100, "本機 EDA 完成", "Cloudflare Worker 尚未設定，因此未上傳檔案");
       showToast("本機 EDA 已完成；目前未設定 Agent API，因此檔案沒有離開瀏覽器。");
-      elements.fileMeta.textContent = `${formatBytes(selectedFile.size)} · 本機 EDA 完成`;
+      elements.fileMeta.textContent = `${selectedFiles.length} 份檔案 · 本機 EDA 完成`;
     }
     elements.analyzeButton.textContent = "重新分析";
     document.querySelector("#overview").scrollIntoView({ behavior: "smooth", block: "start" });

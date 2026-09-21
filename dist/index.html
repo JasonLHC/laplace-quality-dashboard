@@ -65,11 +65,11 @@
             </label>
           </div>
           <div class="drop-zone" id="dropZone" tabindex="0" role="button" aria-label="選擇或拖曳 Excel 檔案">
-            <input id="fileInput" type="file" accept=".xlsx,.xls,.csv" hidden />
+            <input id="fileInput" type="file" accept=".xlsx,.xls,.csv" multiple hidden />
             <span class="upload-icon" aria-hidden="true">
               <svg viewBox="0 0 24 24"><path d="M12 16V4m0 0L7.5 8.5M12 4l4.5 4.5M5 15v4h14v-4" /></svg>
             </span>
-            <span class="file-state"><strong id="fileTitle">拖曳檔案至此，或點擊選擇</strong><small id="fileMeta">支援 XLSX、XLS、CSV，單檔上限 100 MB</small></span>
+            <span class="file-state"><strong id="fileTitle">拖曳檔案至此，或點擊選擇</strong><small id="fileMeta">支援 XLSX、XLS、CSV，最多兩份、單檔上限 50 MB</small></span>
             <button class="primary-button" id="analyzeButton" type="button" disabled>開始分析</button>
           </div>
           <div class="job-progress" id="jobProgress" hidden aria-live="polite">
