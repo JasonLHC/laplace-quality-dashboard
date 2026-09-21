@@ -229,7 +229,7 @@ function renderAgentWaiting(report) {
   document.querySelector("#aiStatus").innerHTML = `<i></i>${API_BASE ? "等待 Agent" : "尚未連線"}`;
   document.querySelector(".insight-summary").innerHTML = `
     <span class="priority high">EDA</span>
-    <div><strong>本機資料健檢已完成</strong><p>${API_BASE ? "檔案將由 Cloudflare 安全轉送至 Laplace Agent 團隊。" : "設定 Cloudflare Worker 位址後，才能取得根因分析與改善建議。"}</p></div>`;
+    <div><strong>本機資料健檢已完成</strong><p>${API_BASE ? "原始檔案保留在瀏覽器；Cloudflare 僅將 EDA 統計摘要送至 Laplace Agent 團隊。" : "設定 Cloudflare Worker 位址後，才能取得根因分析與改善建議。"}</p></div>`;
   document.querySelector(".action-list").innerHTML = `
     <li><span>01</span><div><strong>確認欄位與單位</strong><p>目前辨識 ${report.input_summary.column_count} 個欄位、${report.input_summary.row_count} 筆資料。</p></div></li>
     <li><span>02</span><div><strong>交由 Agent 深度分析</strong><p>產線根因、證據強度與改善建議不由簡單 EDA 自動推定。</p></div></li>`;
@@ -259,14 +259,17 @@ async function runLocalEda(file) {
   return report;
 }
 
-async function submitToApi(file, report) {
-  updateProgress(62, "正在安全上傳", "Cloudflare 將檔案轉送至 Laplace，不會公開 API key");
-  const body = new FormData();
-  body.append("file", file);
-  body.append("analysis_type", report.data_type);
-  body.append("template_id", report.template_id);
-  body.append("eda_summary", JSON.stringify(report));
-  const response = await fetch(`${API_BASE}/api/analysis-jobs`, { method: "POST", body });
+async function submitToApi(report) {
+  updateProgress(62, "正在送出 EDA 摘要", "原始 Excel 留在瀏覽器；Cloudflare 僅轉送統計摘要");
+  const response = await fetch(`${API_BASE}/api/analysis-jobs`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      analysis_type: report.data_type,
+      template_id: report.template_id,
+      eda_summary: report,
+    }),
+  });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(payload.error || `建立分析任務失敗（${response.status}）`);
   updateProgress(100, "Agent 任務已建立", payload.message || "Laplace Agent 團隊已收到分析資料");
@@ -281,9 +284,9 @@ elements.analyzeButton.addEventListener("click", async (event) => {
   try {
     const report = await runLocalEda(selectedFile);
     if (API_BASE) {
-      const job = await submitToApi(selectedFile, report);
+      const job = await submitToApi(report);
       showToast(`分析任務已建立${job.job_id ? `：${job.job_id}` : ""}`);
-      elements.fileMeta.textContent = `${formatBytes(selectedFile.size)} · 已送交 Laplace Agent`;
+      elements.fileMeta.textContent = `${formatBytes(selectedFile.size)} · 原始檔未上傳 · EDA 摘要已送交 Agent`;
     } else {
       updateProgress(100, "本機 EDA 完成", "Cloudflare Worker 尚未設定，因此未上傳檔案");
       showToast("本機 EDA 已完成；目前未設定 Agent API，因此檔案沒有離開瀏覽器。");

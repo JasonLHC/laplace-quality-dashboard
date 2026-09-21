@@ -7,7 +7,7 @@
 - 工作表、資料列、欄位型態、缺失率、數值統計與 IQR 離群值 EDA
 - 產線、良率與不良原因欄位自動辨識
 - 多產線 KPI、資料量圖、不良 Pareto 與比較表
-- Cloudflare Worker → Laplace 檔案上傳 → Agent 團隊呼叫骨架
+- Cloudflare Worker → Laplace Agent 團隊 EDA 摘要呼叫
 - 可驗證的 `fuye-production-quality-v1` 報告 JSON schema 與 Agent prompt
 - 桌面與行動裝置響應式版面
 
@@ -19,8 +19,7 @@
 
 ```text
 GitHub Pages（靜態前端＋本機 EDA）
-  → Cloudflare Worker（Secrets、CORS、附件轉送、Webhook 驗證）
-  → Laplace /upload-file
+  → Cloudflare Worker（Secrets、CORS、EDA JSON 驗證、Webhook 驗證）
   → Laplace /invoke/{team-endpoint}
 ```
 
@@ -43,7 +42,6 @@ window.LINESIGHT_CONFIG = {
 `worker/wrangler.jsonc` 中需要確認：
 
 - `LAPLACE_BASE_URL`：`https://www.laplaceai.co`
-- `LAPLACE_UPLOAD_PATH`：`/api/backend/upload-file`
 - `LAPLACE_INVOKE_PATH`：已建立的 Agent 團隊端點
 - `ALLOWED_ORIGINS`：允許呼叫 Worker 的前端 origin
 
@@ -58,17 +56,16 @@ npx wrangler secret put LAPLACE_WEBHOOK_SECRET
 
 ```http
 POST {LAPLACE_API_BASE}/api/analysis-jobs
-Content-Type: multipart/form-data
+Content-Type: application/json
 ```
 
-欄位：
+JSON 欄位：
 
-- `file`: Excel 或 CSV
-- `analysis_type`: `production_quality`
-- `template_id`: `fuye-production-quality-v1`
-- `eda_summary`: 瀏覽器產生的 EDA JSON
+- `analysis_type`: `production_parameters`、`abnormal_records` 或 `unknown`
+- `template_id`: EDA 選用的報告模板
+- `eda_summary`: 瀏覽器產生的 EDA JSON 物件
 
-Worker 會先以 `multipart/form-data` 傳送 `fileName` 與 `fileToUpload`。Laplace 成功時回傳 HTTP 201 與 `uploadFileId`，Worker 再用 `attachments: [{ fileId: uploadFileId }]` 呼叫 Agent 團隊。
+原始 Excel／CSV 只在瀏覽器中解析，不會傳送到 Worker 或 Laplace。Worker 驗證摘要格式與 1 MB 上限後，將統計摘要放入 `message`，以 Endpoint secret 呼叫 Agent 團隊；Agent 必須明示未取得原始檔案，不能把摘要以外的內容當成已驗證事實。
 
 若綁定 `ANALYSIS_RESULTS` KV、設定 `PUBLIC_WORKER_URL` 與 Webhook secret，Worker 會驗證 `X-Signature`、五分鐘時間窗並保存七天結果。
 

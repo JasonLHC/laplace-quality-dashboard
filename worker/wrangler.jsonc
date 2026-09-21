@@ -6,7 +6,6 @@
   "vars": {
     "ALLOWED_ORIGINS": "https://jasonlhc.github.io",
     "LAPLACE_BASE_URL": "https://www.laplaceai.co",
-    "LAPLACE_UPLOAD_PATH": "/api/backend/upload-file",
     "LAPLACE_INVOKE_PATH": "/api/backend/api/v1/invoke/ep_f95eafc98111934f6e0ae4b10a53a3f7"
   }
 }
